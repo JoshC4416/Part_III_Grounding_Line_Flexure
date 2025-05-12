@@ -26,15 +26,6 @@ def Outer_profile_solver(distance, surface, bed, float_base, interp_base, veloci
     vel_data = np.asarray(pd.to_numeric(velocity[idx_start:], errors='coerce'))        # [m/s]
 
 
-    '''
-    x_data = pd.to_numeric(distance[idx_start:] * 1e3, errors='coerce')[:50]     # [km] -> [m]
-    s_data = pd.to_numeric(surface[idx_start:], errors='coerce')[:50]            # [m]
-    b_data = pd.to_numeric(-bed[idx_start:], errors='coerce')[:50]               # [m]
-    f_data = pd.to_numeric(-float_base[idx_start:], errors='coerce')[:50]        # [m]
-    f_interp = pd.to_numeric(-interp_base[idx_start:], errors='coerce')[:50]     # [m]
-    '''
-
-
     Nx = len(x_data)
 
     # # Grounding point
@@ -149,26 +140,7 @@ def Outer_profile_solver(distance, surface, bed, float_base, interp_base, veloci
         p_new[v_change] = p_init[v_change] + omega * (p_update[v_change] - p_init[v_change])
 
         return p_new, p_update
-    
-    def h_update_profile(thickness_init, df_dp, surface_current, surface_data, thickness_data_gr, v_ungrounded, omega):
 
-        # np.where(df_dp > 0, df_dp, -df_dp)
-        df_dp_scaled = df_dp / np.max(np.abs(df_dp))  # Normalize to a range [-1, 1]
-        # epsilon = 1e-5
-        # np.where(df_dp > epsilon, df_dp, -df_dp)
-
-
-        # Calculate the Newton-Raphson update
-        p_update = thickness_init - ((surface_current - surface_data) / df_dp_scaled)
-
-        # Apply updates only where allowed; otherwise, use known data
-        p_update[~v_ungrounded] = thickness_data_gr[~v_ungrounded]
-
-        # Apply a fraction (omega) of the Newton-Raphson step
-        p_new = np.copy(thickness_data_gr)
-        p_new = thickness_init + omega * (p_update - thickness_init)
-
-        return p_new, p_update
     
     def h_update_plot(x, s, b, b0, zm, h_current, h_update, h_new, dzm_dh, omega, lgd_flag, str_title):
         # def contiguous_regions(condition):
@@ -357,7 +329,6 @@ def Outer_profile_solver(distance, surface, bed, float_base, interp_base, veloci
 
     ###############
 
-
     run_count = 1
 
     while (error_val > error_threshold) & (run_count < max_hb_iter):
@@ -370,9 +341,9 @@ def Outer_profile_solver(distance, surface, bed, float_base, interp_base, veloci
 
         # Calculate the updated ice thickness (Newton Raphson)
 
-        # h_update = h_init - (zm + h_init/2 - s_data) / (dzm_dh + 1/2)           # Why plus 1/2 (Is it okay that I adjusted this to 1 to avoid an error)
-        # print(h_update, dzm_dh, ((zm + h_init/2 - s_data) / (dzm_dh + 1/2)))    # Used for debugging
-        # h_update = h_init - (zm + h_init/2 - s_data) / (dzm_dh + 1)           # Why not plus 1? --> Change the regularisation
+        # h_update = h_init - (zm + h_init/2 - s_data) / (dzm_dh + 1/2)
+        # print(h_update, dzm_dh, ((zm + h_init/2 - s_data) / (dzm_dh + 1/2)))
+        # h_update = h_init - (zm + h_init/2 - s_data) / (dzm_dh + 1)
 
         # regularization_factor = 0.1
         # smoothed_dzm_dh = (dzm_dh + 1/2) + regularization_factor * np.gradient(h_init)
@@ -382,7 +353,7 @@ def Outer_profile_solver(distance, surface, bed, float_base, interp_base, veloci
         # dzm_dh_v2 = polyfit_data_gradient(h, zm, 1, 4, 3)
         # dzm_db_v2 = polyfit_data_gradient(b0, zm, 1, 4, 3)
 
-        h, h_update = h_update_profile(h_init , dzm_dh + 1/2, zm + (h_init/2), s_data, h_data, ~v_gr, omega_hb)
+        h, h_update = update_profile(h_init , dzm_dh + 1/2, zm + (h_init/2), s_data, h_data, ~v_gr, omega_hb)
         b0, b0_update = update_profile(b0_init, dzm_db0, zm, zm_data, b_data, v_gr, omega_hb)
 
         # Avoid negative values of h
@@ -391,17 +362,11 @@ def Outer_profile_solver(distance, surface, bed, float_base, interp_base, veloci
 
         # b0[-b0 > (zm - h/2)] = -(zm - h/2)[-b0 > (zm - h/2)]
         
-        # map(lambda x: x if x <= 1e-6 else 1e-6, dzm_db0)     # Added this to prevent the infinite error from np.linalg.norm(b0_update - b0_init)
-        # dzm_db0 = np.where(dzm_db0 == 0, np.finfo(float).eps, dzm_db0)        # This was another way of achieving the same as the above
-
-        # I've added damping and regularization terms to the newton-raphson below, but these both help but don't solve the problem of the error plateauing to a finite value
         # damping = 1e-3
         # regularization = 0.03
         # b0_update = b0_init - damping * ((zm - zm_data) / (2*dzm_db0 + regularization))
 
         # b0_update = b0_init - ((zm - zm_data) / (dzm_db0))
-        
-        # print(f'first and last values of dzm_db0 = {dzm_db0[0]}, {dzm_db0[-1]}')      # Used for degugging
 
         # Tempered relaxation in relevant regions
         # h[v_sb] = h_init[v_sb] + omega * (h_update[v_sb] - h_init[v_sb])
@@ -428,10 +393,7 @@ def Outer_profile_solver(distance, surface, bed, float_base, interp_base, veloci
         # if run_count % 10 == 0:
             # b0_update_plot(x_data, s_data, b_data, h, zm, b0_init, b0_update, b0, dzm_db0, omega_hb, lgd_flag, str_title)
         
-
-        # Comment these two lines out if you don't want to see the profile as it's calculated, speeding up the iterative process
-
-        if (run_count % fig_freq == 0):                                               # Plotting every 50th iteration
+        if (run_count % fig_freq == 0):    
                 run_title = f"Run {run_count}: error = {error_val:.3e}"
                 ice_profile(x_data, s_data, b_data, f_data, f_interp, zm, h, b0, run_title)
 
@@ -450,11 +412,6 @@ def Outer_profile_solver(distance, surface, bed, float_base, interp_base, veloci
         if (run_count % 10 == 0):           
             print('np.linalg.norm(b0 - b0_init)', np.linalg.norm(b0 - b0_init))   # Used for debugging
             print(f"Run {run_count}: error = {error_val:.3e}")
-
-        # This is a very crude temporary error check to preventing the code iterating forever
-        # It doesn't iterate until the errror is small anymore, but I've made it break the loop when the error stops changing
-        # if np.abs(previous_error - error_val) / previous_error < error_threshold:
-            # break
 
     # Plot the final results against the Thwaites data
     final_title = f"$E/(12 (1- \N{GREEK SMALL LETTER NU}^2) \N{GREEK SMALL LETTER RHO}_w g) =${C1:.3g}m, $k_0 / \N{GREEK SMALL LETTER RHO}_w g =$ {C2:.3g}, $\N{GREEK SMALL LETTER RHO}_i / \N{GREEK SMALL LETTER RHO}_w$ = {C3:.3g}"
