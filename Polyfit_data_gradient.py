@@ -6,20 +6,6 @@ from numpy.polynomial import Polynomial as P
 
 
 def polyfit_data_gradient(x, F, n_der, n_poly, q):
-    """
-    For a 1D grid of points x and corresponding data values F(x),
-    numerically approximate F^{(n_der)}(x) at these points using polynomial fitting.
-    
-    Parameters:
-    x       : numpy.ndarray - Spatial grid over which derivatives are applied
-    F       : numpy.ndarray - Vector of corresponding data values
-    n_der   : int - Order of derivative to compute
-    n_poly  : int - Degree of polynomial used for the fitting process
-    q       : int - Stencil parameter; use values at (j-q:j+q) for calculation
-    
-    Returns:
-    dF      : numpy.ndarray - Numerical approximation of the n_der derivative of F
-    """
     
     # Ensure valid stencil and polynomial degree
     if 2 * q < n_poly:
@@ -34,9 +20,7 @@ def polyfit_data_gradient(x, F, n_der, n_poly, q):
 
     # Helper function to compute derivative    
     def derivative_calc(x, F, idx, m, n_der, n_poly):
-        """
-        Calculate derivative using polynomial fitting.
-        """
+        
         v = x[idx] - x[m]  # Center the x-values around the current point
         Y = F[idx]
 
@@ -56,17 +40,17 @@ def polyfit_data_gradient(x, F, n_der, n_poly, q):
         der_val *= factorial(n_der) * p_hat[n_poly - n_der]
         return der_val
 
-    # 1) The bulk of the domain
+    # The bulk of the domain
     for m in range(q, N - q):
         idx = np.arange(m - q, m + q + 1)
         dF[m] = derivative_calc(x, F, idx, m, n_der, n_poly)
 
-    # 2) Fill in the first q rows (Look Right)
+    # Fill in the first q rows (Look Right)
     for m in range(q):
         idx = np.arange(2 * q + 1)
         dF[m] = derivative_calc(x, F, idx, m, n_der, n_poly)
 
-    # 3) Fill in the final q rows (Look Left)
+    # Fill in the final q rows (Look Left)
     for m in range(N - q, N):
         idx = np.arange(N - 2 * q, N)
         dF[m] = derivative_calc(x, F, idx, m, n_der, n_poly)
